@@ -484,6 +484,7 @@ static void get_icu_disp_value_src_php( char* tag_name, INTERNAL_FUNCTION_PARAME
 		RETURN_THROWS();
 	}
 
+#ifdef MAGMA_ENABLE_FIXES
 	if(loc_name_len > ULOC_FULLNAME_CAPACITY) {
 		/* See bug 67397: overlong locale names cause trouble in uloc_getDisplayName */
 		spprintf(&msg , 0, "locale_get_display_%s : name too long", tag_name );
@@ -491,6 +492,11 @@ static void get_icu_disp_value_src_php( char* tag_name, INTERNAL_FUNCTION_PARAME
 		efree(msg);
 		RETURN_FALSE;
 	}
+#else
+	#ifdef MAGMA_ENABLE_CANARIES
+		MAGMA_LOG("PHP014",loc_name_len > ULOC_FULLNAME_CAPACITY);
+	#endif
+#endif
 
 	if(loc_name_len == 0) {
 		loc_name = intl_locale_get_default();

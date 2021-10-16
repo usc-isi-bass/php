@@ -2054,6 +2054,7 @@ static inline void exif_offset_info_init(
 /* Try to get a pointer at offset_base+offset with length dereferenceable bytes. */
 static inline char *exif_offset_info_try_get(
 		const exif_offset_info *info, size_t offset, size_t length) {
+#ifdef MAGMA_ENABLE_FIXES
 	char *start, *end;
 	if (ptr_offset_overflows(info->offset_base, offset)) {
 		return NULL;
@@ -2070,6 +2071,20 @@ static inline char *exif_offset_info_try_get(
 	}
 
 	return start;
+#else
+	if ((offset + length) > (info->valid_end - info->valid_start)) {
+		return NULL;
+	}
+#ifdef MAGMA_ENABLE_CANARIES
+	// The canaries are split so that a triggered bug is recorded as early as
+	//   possible.
+	MAGMA_LOG("PHP011", ptr_offset_overflows(info->offset_base, offset));
+	MAGMA_LOG("PHP011", ptr_offset_overflows(info->offset_base + offset, length));
+	MAGMA_LOG("PHP011", MAGMA_OR((info->offset_base + offset) < info->valid_start,
+			(info->offset_base + offset + length) > info->valid_end));
+#endif
+	return info->offset_base + offset;
+#endif
 }
 
 static inline bool exif_offset_info_contains(
@@ -3162,11 +3177,25 @@ static bool exif_process_IFD_in_MAKERNOTE(image_info_type *ImageInfo, char * val
 		break;
 	}
 
+
+#ifdef MAGMA_ENABLE_FIXES
 	if (value_len < 2 || maker_note->offset >= value_len - 1) {
 		/* Do not go past the value end */
 		exif_error_docref("exif_read_data#error_ifd" EXIFERR_CC, ImageInfo, E_WARNING, "IFD data too short: 0x%04X offset 0x%04X", value_len, maker_note->offset);
 		return true;
 	}
+#else
+	if (maker_note->offset >= value_len) {
+		exif_error_docref("exif_read_data#error_ifd" EXIFERR_CC, ImageInfo, E_WARNING, "IFD data too short: 0x%04X offset 0x%04X", value_len, maker_note->offset);
+		return true;
+	}
+	#ifdef MAGMA_ENABLE_CANARIES
+		MAGMA_LOG("PHP009",MAGMA_OR(maker_note->offset == value_len - 1,value_len < 2));
+	#endif
+
+#endif
+
+
 
 	dir_start = value_ptr + maker_note->offset;
 
@@ -3203,10 +3232,17 @@ static bool exif_process_IFD_in_MAKERNOTE(image_info_type *ImageInfo, char * val
 		exif_error_docref("exif_read_data#error_ifd" EXIFERR_CC, ImageInfo, E_WARNING, "Illegal IFD size: 2 + 0x%04X*12 = 0x%04X > 0x%04X", NumDirEntries, 2+NumDirEntries*12, value_len);
 		return false;
 	}
+
+	#ifdef MAGMA_ENABLE_FIXES
 	if ((dir_start - value_ptr) > value_len - (2+NumDirEntries*12)) {
 		exif_error_docref("exif_read_data#error_ifd" EXIFERR_CC, ImageInfo, E_WARNING, "Illegal IFD size: 0x%04X > 0x%04X", (dir_start - value_ptr) + (2+NumDirEntries*12), value_len);
 		return false;
 	}
+	#else
+		#ifdef MAGMA_ENABLE_CANARIES
+			MAGMA_LOG("PHP004",(dir_start - value_ptr) > value_len - (2+NumDirEntries*12));
+		#endif
+	#endif
 
 	switch (maker_note->offset_mode) {
 		case MN_OFFSET_MAKER:
@@ -3941,10 +3977,18 @@ static bool exif_scan_thumbnail(image_info_type *ImageInfo)
 	int             n, marker;
 	size_t          length=2, pos=0;
 	jpeg_sof_info   sof_info;
-
+#ifdef MAGMA_ENABLE_FIXES
 	if (!data || ImageInfo->Thumbnail.size < 4) {
 		return false; /* nothing to do here */
 	}
+#else
+	#ifdef MAGMA_ENABLE_CANARIES
+	MAGMA_LOG("PHP003", MAGMA_AND((bool)data, ImageInfo->Thumbnail.size < 4));
+	#endif
+	if (!data) {
+		return false; /* nothing to do here */
+	}
+#endif
 	if (memcmp(data, "\xFF\xD8\xFF", 3)) {
 		if (!ImageInfo->Thumbnail.width && !ImageInfo->Thumbnail.height) {
 			exif_error_docref(NULL EXIFERR_CC, ImageInfo, E_WARNING, "Thumbnail is not a JPEG image");
@@ -3970,12 +4014,27 @@ static bool exif_scan_thumbnail(image_info_type *ImageInfo)
 		if (c == 0xFF)
 			return false;
 		marker = c;
+	#ifdef MAGMA_ENABLE_FIXES
 		if (pos>=ImageInfo->Thumbnail.size)
 			return false;
+	#else
+		#ifdef MAGMA_ENABLE_CANARIES
+			MAGMA_LOG("PHP006", pos >= ImageInfo->Thumbnail.size);
+		#endif
+	#endif
 		length = php_jpg_get16(data+pos);
+	#ifdef MAGMA_ENABLE_FIXES
 		if (length > ImageInfo->Thumbnail.size || pos >= ImageInfo->Thumbnail.size - length) {
 			return false;
 		}
+	#else
+		#ifdef MAGMA_ENABLE_CANARIES
+			MAGMA_LOG("PHP010",MAGMA_AND(MAGMA_OR(pos > SIZE_MAX - length, length > ImageInfo->Thumbnail.size), pos < ImageInfo->Thumbnail.size - length));
+		#endif
+		if (pos+length>=ImageInfo->Thumbnail.size) {
+			return false;
+		}
+	#endif
 #ifdef EXIF_DEBUG
 		exif_error_docref(NULL EXIFERR_CC, ImageInfo, E_NOTICE, "Thumbnail: process section(x%02X=%s) @ x%04X + x%04X", marker, exif_get_markername(marker), pos, length);
 #endif
@@ -3994,10 +4053,16 @@ static bool exif_scan_thumbnail(image_info_type *ImageInfo)
 			case M_SOF14:
 			case M_SOF15:
 				/* handle SOFn block */
+			#ifdef MAGMA_ENABLE_FIXES
 				if (length < 8 || ImageInfo->Thumbnail.size - 8 < pos) {
 					/* exif_process_SOFn needs 8 bytes */
 					return false;
 				}
+			#else
+				#ifdef MAGMA_ENABLE_CANARIES
+					MAGMA_LOG("PHP010",MAGMA_OR(length < 8, ImageInfo->Thumbnail.size - 8 < pos));
+				#endif
+			#endif
 				exif_process_SOFn(data+pos, marker, &sof_info);
 				ImageInfo->Thumbnail.height   = sof_info.height;
 				ImageInfo->Thumbnail.width    = sof_info.width;
@@ -4033,7 +4098,14 @@ static bool exif_process_IFD_in_TIFF_impl(image_info_type *ImageInfo, size_t dir
 	int entry_tag , entry_type;
 	tag_table_type tag_table = exif_get_tag_table(section_index);
 
+#ifdef MAGMA_ENABLE_FIXES
 	if (ImageInfo->FileSize >= 2 && ImageInfo->FileSize - 2 >= dir_offset) {
+#else
+#ifdef MAGMA_ENABLE_CANARIES
+	MAGMA_LOG("PHP002", dir_offset > SIZE_MAX - 2);
+#endif
+	if (ImageInfo->FileSize >= dir_offset+2) {
+#endif
 		sn = exif_file_sections_add(ImageInfo, M_PSEUDO, 2, NULL);
 #ifdef EXIF_DEBUG
 		exif_error_docref(NULL EXIFERR_CC, ImageInfo, E_NOTICE, "Read from TIFF: filesize(x%04X), IFD dir(x%04X + x%04X)", ImageInfo->FileSize, dir_offset, 2);
@@ -4750,9 +4822,14 @@ PHP_FUNCTION(exif_thumbnail)
 	ZVAL_STRINGL(return_value, ImageInfo.Thumbnail.data, ImageInfo.Thumbnail.size);
 	if (arg_c >= 3) {
 		if (!ImageInfo.Thumbnail.width || !ImageInfo.Thumbnail.height) {
+
+		#ifdef MAGMA_ENABLE_FIXES
 			if (!exif_scan_thumbnail(&ImageInfo)) {
 				ImageInfo.Thumbnail.width = ImageInfo.Thumbnail.height = 0;
 			}
+		#else
+			exif_scan_thumbnail(&ImageInfo);
+		#endif
 		}
 		ZEND_TRY_ASSIGN_REF_LONG(z_width,  ImageInfo.Thumbnail.width);
 		ZEND_TRY_ASSIGN_REF_LONG(z_height, ImageInfo.Thumbnail.height);

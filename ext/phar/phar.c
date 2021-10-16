@@ -802,13 +802,23 @@ static int phar_parse_pharfile(php_stream *fp, char *fname, size_t fname_len, ch
 	buffer = (char *)emalloc(manifest_len);
 	savebuf = buffer;
 	endbuffer = buffer + manifest_len;
-
+#ifdef MAGMA_ENABLE_FIXES
 	if (manifest_len < MANIFEST_FIXED_LEN || manifest_len != php_stream_read(fp, buffer, manifest_len)) {
 		MAPPHAR_FAIL("internal corruption of phar \"%s\" (truncated manifest header)")
 	}
 
 	/* extract the number of entries */
 	SAFE_PHAR_GET_32(buffer, endbuffer, manifest_count);
+#else
+	if (manifest_len < 10 || manifest_len != php_stream_read(fp, buffer, manifest_len)) {
+		MAPPHAR_FAIL("internal corruption of phar \"%s\" (truncated manifest header)")
+	}
+
+	PHAR_GET_32(buffer, manifest_count);
+	#ifdef MAGMA_ENABLE_CANARIES
+		MAGMA_LOG("PHP007",buffer + 4 > endbuffer);
+	#endif
+#endif
 
 	if (manifest_count == 0) {
 		MAPPHAR_FAIL("in phar \"%s\", manifest claims to have zero entries.  Phars must have at least 1 entry");
@@ -827,8 +837,15 @@ static int phar_parse_pharfile(php_stream *fp, char *fname, size_t fname_len, ch
 		}
 		return FAILURE;
 	}
-
+#ifdef MAGMA_ENABLE_FIXES
 	SAFE_PHAR_GET_32(buffer, endbuffer, manifest_flags);
+#else
+	PHAR_GET_32(buffer, manifest_flags);
+
+	#ifdef MAGMA_ENABLE_CANARIES
+		MAGMA_LOG("PHP007",buffer + 4 > endbuffer);
+	#endif
+#endif
 
 	manifest_flags &= ~PHAR_HDR_COMPRESSION_MASK;
 	manifest_flags &= ~PHAR_FILE_COMPRESSION_MASK;
@@ -1036,13 +1053,23 @@ static int phar_parse_pharfile(php_stream *fp, char *fname, size_t fname_len, ch
 	}
 
 	/* extract alias */
+#ifdef MAGMA_ENABLE_FIXES
 	SAFE_PHAR_GET_32(buffer, endbuffer, tmp_len);
-
+#else
+	PHAR_GET_32(buffer, manifest_flags);
+	#ifdef MAGMA_ENABLE_CANARIES
+		MAGMA_LOG("PHP007",buffer + 4 > endbuffer);
+	#endif
+#endif
 	if (buffer + tmp_len > endbuffer) {
 		MAPPHAR_FAIL("internal corruption of phar \"%s\" (buffer overrun)");
 	}
-
-	if (manifest_len < MANIFEST_FIXED_LEN + tmp_len) {
+#ifdef MAGMA_ENABLE_FIXES
+	if (manifest_len < MANIFEST_FIXED_LEN + tmp_len)
+#else
+	if (manifest_len < 10 + tmp_len)
+#endif
+	{
 		MAPPHAR_FAIL("internal corruption of phar \"%s\" (truncated manifest header)")
 	}
 
@@ -1080,7 +1107,11 @@ static int phar_parse_pharfile(php_stream *fp, char *fname, size_t fname_len, ch
 	}
 
 	/* we have 5 32-bit items plus 1 byte at least */
+#ifdef MAGMA_ENABLE_FIXES
 	if (manifest_count > ((manifest_len - MANIFEST_FIXED_LEN - tmp_len) / (5 * 4 + 1))) {
+#else
+	if (manifest_count > ((manifest_len - 10 - tmp_len) / (5 * 4 + 1))) {
+#endif
 		/* prevent serious memory issues */
 		MAPPHAR_FAIL("internal corruption of phar \"%s\" (too many manifest entries for size of manifest)")
 	}
@@ -1089,11 +1120,26 @@ static int phar_parse_pharfile(php_stream *fp, char *fname, size_t fname_len, ch
 	mydata->is_persistent = PHAR_G(persist);
 
 	/* check whether we have meta data, zero check works regardless of byte order */
+#ifdef MAGMA_ENABLE_FIXES
 	SAFE_PHAR_GET_32(buffer, endbuffer, len);
+#else
+	PHAR_GET_32(buffer, len);
+	#ifdef MAGMA_ENABLE_CANARIES
+		MAGMA_LOG("PHP007",buffer + 4 > endbuffer);
+	#endif
+#endif
+
 	if (mydata->is_persistent) {
 		if (!len) {
 			/* FIXME: not sure why this is needed but removing it breaks tests */
+		#ifdef MAGMA_ENABLE_FIXES
 			SAFE_PHAR_GET_32(buffer, endbuffer, len);
+		#else
+			PHAR_GET_32(buffer, len);
+			#ifdef MAGMA_ENABLE_CANARIES
+				MAGMA_LOG("PHP007",buffer + 4 > endbuffer);
+			#endif
+		#endif
 		}
 	}
 	if(len > (size_t)(endbuffer - buffer)) {
@@ -1122,9 +1168,20 @@ static int phar_parse_pharfile(php_stream *fp, char *fname, size_t fname_len, ch
 	entry.is_persistent = mydata->is_persistent;
 
 	for (manifest_index = 0; manifest_index < manifest_count; ++manifest_index) {
+	#ifdef MAGMA_ENABLE_FIXES
 		if (buffer + 28 > endbuffer) {
 			MAPPHAR_FAIL("internal corruption of phar \"%s\" (truncated manifest entry)")
 		}
+	#else
+		if (buffer + 4 > endbuffer) {
+			MAPPHAR_FAIL("internal corruption of phar \"%s\" (truncated manifest entry)")
+		}
+		#ifdef MAGMA_ENABLE_CANARIES
+			MAGMA_LOG("PHP015",buffer + 28 > endbuffer);
+		#endif
+	#endif
+
+
 
 		PHAR_GET_32(buffer, entry.filename_len);
 
@@ -1135,10 +1192,20 @@ static int phar_parse_pharfile(php_stream *fp, char *fname, size_t fname_len, ch
 		if (entry.is_persistent) {
 			entry.manifest_pos = manifest_index;
 		}
-
+	#ifdef MAGMA_ENABLE_FIXES
 		if (entry.filename_len > (size_t)(endbuffer - buffer - 24)) {
 			MAPPHAR_FAIL("internal corruption of phar \"%s\" (truncated manifest entry)");
 		}
+	#else
+		#ifdef MAGMA_ENABLE_CANARIES
+			MAGMA_LOG("PHP015",entry.filename_len > INT_MAX - 20);
+			MAGMA_LOG("PHP015",MAGMA_AND(entry.filename_len > (size_t)(endbuffer - buffer - 24),
+								entry.filename_len <= (size_t)(endbuffer - buffer - 20)));
+		#endif
+		if (entry.filename_len + 20 > endbuffer - buffer) {
+			MAPPHAR_FAIL("internal corruption of phar \"%s\" (truncated manifest entry)");
+		}
+	#endif
 
 		if ((manifest_ver & PHAR_API_VER_MASK) >= PHAR_API_MIN_DIR && buffer[entry.filename_len - 1] == '/') {
 			entry.is_dir = 1;
@@ -2047,7 +2114,14 @@ next_extension:
 	}
 
 	while (pos != filename && (*(pos - 1) == '/' || *(pos - 1) == '\0')) {
+	#ifdef MAGMA_ENABLE_FIXES
 		pos = memchr(pos + 1, '.', filename_len - (pos - filename) - 1);
+	#else
+		#ifdef MAGMA_ENABLE_CANARIES
+			MAGMA_LOG("PHP001", memchr(pos + 1, '.', filename_len - (pos - filename) - 1) == NULL);
+		#endif
+		pos = memchr(pos + 1, '.', filename_len - (pos - filename) + 1);
+	#endif
 		if (!pos) {
 			return FAILURE;
 		}

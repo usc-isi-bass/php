@@ -60,7 +60,7 @@ if test "$PHP_FUZZER" != "no"; then
     ])
   else
     FUZZING_LIB="$LIB_FUZZING_ENGINE"
-    FUZZING_CC="$CXX -stdlib=libc++"
+    AX_CHECK_COMPILE_FLAG([-stdlib=libstdc++], [FUZZING_CC="$CXX -stdlib=libstdc++"], [FUZZING_CC="$CXX"])
   fi
   PHP_SUBST(FUZZING_LIB)
   PHP_SUBST(FUZZING_CC)

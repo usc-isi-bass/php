@@ -376,7 +376,11 @@ ZEND_INTRIN_SSSE3_FUNC_DECL(zend_string *php_base64_encode_ssse3(const unsigned 
 ZEND_INTRIN_SSSE3_FUNC_DECL(zend_string *php_base64_decode_ex_ssse3(const unsigned char *str, size_t length, bool strict));
 # endif
 
+
+__attribute__((used))
 zend_string *php_base64_encode_default(const unsigned char *str, size_t length);
+
+__attribute__((used))
 zend_string *php_base64_decode_ex_default(const unsigned char *str, size_t length, bool strict);
 
 # if (ZEND_INTRIN_AVX2_FUNC_PROTO || ZEND_INTRIN_SSSE3_FUNC_PROTO)

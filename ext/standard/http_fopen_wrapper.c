@@ -708,12 +708,25 @@ finish:
 								tmp_line, response_code);
 				}
 			}
+		#ifdef MAGMA_ENABLE_FIXES
 			if (tmp_line_len >= 1 && tmp_line[tmp_line_len - 1] == '\n') {
 				--tmp_line_len;
 				if (tmp_line_len >= 1 &&tmp_line[tmp_line_len - 1] == '\r') {
 					--tmp_line_len;
 				}
 			}
+		#else
+			#ifdef MAGMA_ENABLE_CANARIES
+				MAGMA_LOG("PHP012", tmp_line_len < 1);
+				MAGMA_LOG("PHP012", MAGMA_AND(tmp_line_len == 1, tmp_line[tmp_line_len - 1] == '\n'));
+			#endif
+			if (tmp_line[tmp_line_len - 1] == '\n') {
+				--tmp_line_len;
+				if (tmp_line[tmp_line_len - 1] == '\r') {
+					--tmp_line_len;
+				}
+			}
+		#endif
 			ZVAL_STRINGL(&http_response, tmp_line, tmp_line_len);
 			zend_hash_next_index_insert(Z_ARRVAL_P(response_header), &http_response);
 		} else {

@@ -447,11 +447,22 @@ foundit:
 			php_stream_seek(fp, sizeof(phar_zip_file_header) + entry.header_offset + entry.filename_len + PHAR_GET_16(zipentry.extra_len), SEEK_SET);
 			sig = (char *) emalloc(entry.uncompressed_filesize);
 			read = php_stream_read(fp, sig, entry.uncompressed_filesize);
+		#ifdef MAGMA_ENABLE_FIXES
 			if (read != entry.uncompressed_filesize || read <= 8) {
 				php_stream_close(sigfile);
 				efree(sig);
 				PHAR_ZIP_FAIL("signature cannot be read");
 			}
+		#else
+			if (read != entry.uncompressed_filesize) {
+				php_stream_close(sigfile);
+				efree(sig);
+				PHAR_ZIP_FAIL("signature cannot be read");
+			}
+			#ifdef MAGMA_ENABLE_CANARIES
+				MAGMA_LOG("PHP016",read <= 8);
+			#endif
+		#endif
 			mydata->sig_flags = PHAR_GET_32(sig);
 			if (FAILURE == phar_verify_signature(sigfile, php_stream_tell(sigfile), mydata->sig_flags, sig + 8, entry.uncompressed_filesize - 8, fname, &mydata->signature, &sig_len, error)) {
 				efree(sig);

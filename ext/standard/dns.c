@@ -481,10 +481,16 @@ static u_char *php_parserr(u_char *cp, u_char *end, querybuf *answer, int type_t
 	GETLONG(ttl, cp);
 	GETSHORT(dlen, cp);
 	CHECKCP(dlen);
+	#ifdef MAGMA_ENABLE_FIXES
 	if (dlen == 0) {
 		/* No data in the response - nothing to do */
 		return NULL;
 	}
+	#else
+		#ifdef MAGMA_ENABLE_CANARIES
+			MAGMA_LOG("PHP008", dlen == 0);
+		#endif
+	#endif
 	if (type_to_fetch != DNS_T_ANY && type != type_to_fetch) {
 		cp += dlen;
 		return cp;
@@ -575,9 +581,15 @@ static u_char *php_parserr(u_char *cp, u_char *end, querybuf *answer, int type_t
 			CHECKCP(n);
 			add_assoc_stringl(subarray, "tag", (char*)cp, n);
 			cp += n;
+			#ifdef MAGMA_ENABLE_FIXES
 			if ( (size_t) dlen < ((size_t)n) + 2 ) {
 				return NULL;
 			}
+			#else
+				#ifdef MAGMA_ENABLE_CANARIES
+					MAGMA_LOG("PHP008",(size_t) dlen < ((size_t)n) + 2);
+				#endif
+			#endif
 			n = dlen - n - 2;
 			CHECKCP(n);
 			add_assoc_stringl(subarray, "value", (char*)cp, n);

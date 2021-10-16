@@ -252,8 +252,9 @@ dnl Append to the array which has been dynamically chosen at m4 time.
 dnl Choose the right compiler/flags/etc. for the source-file.
       case $ac_src in
         *.c[)] ac_comp="$b_c_pre $ac_inc $b_c_meta $3 -c $ac_srcdir$ac_src -o $ac_bdir$ac_obj.$b_lo $b_c_post" ;;
-        *.s[)] ac_comp="$b_c_pre $ac_inc $b_c_meta $3 -c $ac_srcdir$ac_src -o $ac_bdir$ac_obj.$b_lo $b_c_post" ;;
-        *.S[)] ac_comp="$b_c_pre $ac_inc $b_c_meta $3 -c $ac_srcdir$ac_src -o $ac_bdir$ac_obj.$b_lo $b_c_post" ;;
+        *.s|*.S[)]
+        b_c_meta_clean='$(COMMON_FLAGS) $(CFLAGS_CLEAN)';
+        ac_comp="$b_c_pre $ac_inc $b_c_meta_clean $3 -c $ac_srcdir$ac_src -o $ac_bdir$ac_obj.$b_lo $b_c_post" ;;
         *.cpp|*.cc|*.cxx[)] ac_comp="$b_cxx_pre $ac_inc $b_cxx_meta $3 -c $ac_srcdir$ac_src -o $ac_bdir$ac_obj.$b_lo $b_cxx_post" ;;
       esac
 
@@ -2701,7 +2702,7 @@ AC_DEFUN([PHP_CHECK_BUILTIN_CPU_INIT], [
   AC_MSG_CHECKING([for __builtin_cpu_init])
 
   AC_LINK_IFELSE([AC_LANG_PROGRAM([], [[
-    return __builtin_cpu_init()? 1 : 0;
+    return (__builtin_cpu_init(), 1) ? 1 : 0;
   ]])], [
     have_builtin_cpu_init=1
     AC_MSG_RESULT([yes])

@@ -3634,9 +3634,13 @@ PHPAPI zend_string *php_addcslashes(zend_string *str, const char *what, size_t w
 # include "Zend/zend_cpuinfo.h"
 
 ZEND_INTRIN_SSE4_2_FUNC_DECL(zend_string *php_addslashes_sse42(zend_string *str));
+
+__attribute__((used))
 zend_string *php_addslashes_default(zend_string *str);
 
 ZEND_INTRIN_SSE4_2_FUNC_DECL(void php_stripslashes_sse42(zend_string *str));
+
+__attribute__((used))
 void php_stripslashes_default(zend_string *str);
 
 # if ZEND_INTRIN_SSE4_2_FUNC_PROTO

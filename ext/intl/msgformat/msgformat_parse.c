@@ -93,7 +93,13 @@ PHP_FUNCTION( msgfmt_parse_message )
 		RETURN_THROWS();
 	}
 
+#ifdef MAGMA_ENABLE_FIXES
 	INTL_CHECK_LOCALE_LEN(slocale_len);
+#else
+	#ifdef MAGMA_ENABLE_CANARIES
+		MAGMA_LOG("PHP013",(slocale_len > INTL_MAX_LOCALE_LEN));
+	#endif
+#endif
 	memset(mfo, 0, sizeof(*mfo));
 	msgformat_data_init(&mfo->mf_data);
 
